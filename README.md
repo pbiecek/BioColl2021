@@ -1,4 +1,4 @@
-# BioColl2021 <img src="title.png" align="right" style="border: 1px solid #ddd;" width="400"/>
+# BioColl2021 <img src="title.png" align="right" style="border:2px solid black" width="400"/>
 
 Notes for the tutorial *Introduction to Machine Learning with R* given at [Biometrisches Kolloquium 2021](http://www.biometrisches-kolloquium2021.de/en/startseite-english/).
 
