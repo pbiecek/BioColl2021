@@ -1,0 +1,402 @@
+---
+title: "Introduction to Machine Learning"
+subtitle: "With mlr3 and DALEX"
+author: "Przemyslaw Biecek"
+date: "3.14.2021"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    number_sections: true
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load packages
+
+```{r, warning=FALSE, message=FALSE}
+library("tableone")
+library("DALEX")
+library("partykit")
+library("mlr3")
+library("mlr3learners")
+library("ranger")
+library("mlr3tuning")
+library("paradox")
+
+set.seed(1313)
+```
+
+# Conception
+
+Define the objective.
+
+In this example we want to create a good ranking for patients at risk. Thus we will use the AUC measure to evaluate model performance.
+
+## Read the data
+
+- `covid_spring.csv` corresponds to covid mortality data from spring 2020. We will use this data for model training.
+- `covid_summer.csv` corresponds to covid mortality data from summer 2020. We will use this data for model validation.
+
+
+```{r, warning=FALSE, message=FALSE}
+covid_spring <- read.table("covid_spring.csv", sep =";", header = TRUE, stringsAsFactors = TRUE)
+covid_summer <- read.table("covid_summer.csv", sep =";", header = TRUE, stringsAsFactors = TRUE)
+```
+
+## Explore the data
+
+```{r, warning=FALSE, message=FALSE}
+library("tableone")
+
+table1 <- CreateTableOne(vars = colnames(covid_spring)[1:11],
+                         data = covid_spring,
+                         strata = "Death")
+print(table1)
+```
+
+## Transform the data
+
+Do not condition on future! Variables like `Hospitalization` or `Cough` are not good predictors, they are not known in advance.
+
+```{r, warning=FALSE, message=FALSE}
+covid_spring <- covid_spring[,c("Gender", "Age", "Cardiovascular.Diseases", "Diabetes",
+               "Neurological.Diseases", "Kidney.Diseases", "Cancer",
+               "Death")]
+```
+
+# Hello model!
+
+In many cases, you do not need data to create a model. Just google some information about the problem.
+
+It turns out that CDC has some decent statistics about age-related mortality.
+
+https://www.cdc.gov/coronavirus/2019-ncov/covid-data/investigations-discovery/hospitalization-death-by-age.html
+
+## Create a model
+
+```{r, warning=FALSE, message=FALSE}
+cdc_risk <- function(x, base_risk = 0.00003) {
+  bin <- cut(x$Age, c(-Inf, 4.5, 17.5, 29.5, 39.5, 49.5, 64.5, 74.5, 84.5, Inf))
+  relative_risk <- c(2, 1, 15, 45, 130, 400, 1100, 2800, 7900)[as.numeric(bin)] 
+  relative_risk * base_risk
+}
+
+# check it
+x <- data.frame(Age = c(25,45,85))
+cdc_risk(x)
+
+summary(cdc_risk(covid_spring))
+
+table(Death = covid_spring$Death, 
+      Prediction.above.005 = cdc_risk(covid_spring) > 0.05)
+```
+
+## Wrap the model 
+
+Different models have different APIs. 
+
+But you need One API to Rule Them All!
+
+```{r, warning=FALSE, message=FALSE}
+library("DALEX")
+model_cdc <-  DALEX::explain(cdc_risk,
+                   predict_function = function(m, x) m(x),
+                   data  = covid_summer,
+                   y     = covid_summer$Death == "Yes",
+                   type  = "classification",
+                   label = "CDC")
+```
+
+# Model performance
+
+For AUC the `cutoff` does not matter. But we set it to get nice precision and F1.
+
+```{r, warning=FALSE, message=FALSE}
+mp_cdc <- model_performance(model_cdc, cutoff = 0.1)
+mp_cdc
+```
+## ROC
+```{r, warning=FALSE, message=FALSE}
+plot(mp_cdc, geom = "roc")
+```
+
+## LIFT
+
+```{r, warning=FALSE, message=FALSE}
+plot(mp_cdc, geom = "lift")
+```
+
+## Your turn
+
+- Check the AUC for CDC model on the `covid_spring` data. 
+- Plot ROC for both `covid_spring` and `covid_summer` data.
+
+# Grow a tree
+
+Use all the data.
+
+```{r, warning=FALSE, message=FALSE, fig.width=9, fig.height=5}
+library("partykit")
+
+tree <- ctree(Death ~., covid_spring, 
+              control = ctree_control(alpha = 0.0001))
+plot(tree)
+```
+
+```{r, warning=FALSE, message=FALSE}
+model_tree <-  DALEX::explain(tree,
+                   predict_function = function(m, x) predict(m, x, type = "prob")[,2],
+                   data = covid_summer,
+                   y = covid_summer$Death == "Yes",
+                   type = "classification",
+                   label = "Tree",
+                   verbose = FALSE)
+```
+## Test your model
+
+```{r, warning=FALSE, message=FALSE}
+mp_tree <- model_performance(model_tree, cutoff = 0.1)
+mp_tree
+plot(mp_tree, geom = "roc")
+
+plot(mp_tree, mp_cdc, geom = "roc")
+```
+
+## Your turn
+
+- Check the AUC for CDC model on the `covid_spring` data. 
+- Plot ROC for both `covid_spring` and `covid_summer` data.
+- (*)Try to overfit.
+
+# Plant a forest
+
+Let's use `mlr3` package for this.
+
+```{r bagging_tree, warning=FALSE, message=FALSE}
+library("mlr3")
+
+covid_task <- TaskClassif$new(id = "covid_spring",
+                             backend = covid_spring,
+                             target = "Death",
+                             positive = "Yes")
+covid_task
+```
+
+```{r, warning=FALSE, message=FALSE}
+library("mlr3learners")
+library("ranger")
+
+covid_ranger <- lrn("classif.ranger", predict_type = "prob",
+                num.trees = 25)
+covid_ranger
+
+covid_ranger$train(covid_task)
+```
+
+## Test your model
+
+```{r, warning=FALSE, message=FALSE}
+model_ranger <-  explain(covid_ranger,
+                           predict_function = function(m,x)
+                                predict(m, x, predict_type = "prob")[,1],
+                           data = covid_summer,
+                           y = covid_summer$Death == "Yes",
+                           type = "classification",
+                           label = "Ranger",
+                           verbose = FALSE)
+
+mp_ranger <- model_performance(model_ranger)
+mp_ranger
+plot(mp_ranger, geom = "roc")
+
+plot(mp_ranger, mp_tree, mp_cdc, geom = "roc")
+```
+
+## Your turn
+
+- Check the AUC for Ranger model on the `covid_spring` data. 
+- Plot ROC for both `covid_spring` and `covid_summer` data.
+
+# Automated Hyperparameter Optimisation
+
+## Define the search space
+
+```{r, warning=FALSE, message=FALSE}
+library("mlr3tuning")
+library("paradox")
+
+search_space = ps(
+  num.trees = p_int(lower = 50, upper = 500),
+  max.depth = p_int(lower = 1, upper = 10),
+  minprop = p_dbl(lower = 0.01, upper = 0.1),
+  splitrule = p_fct(levels = c("gini", "extratrees"))
+)
+search_space
+```
+
+## Set-up the tuner
+
+Popular searching strategies are `random_search` and `grid_search`.
+Termination is set fo a specific number of evaluations.
+Internal testing is based on 5-fold CV.
+
+```{r, warning=FALSE, message=FALSE}
+tuned_ranger = AutoTuner$new(
+  learner    = covid_ranger,
+  resampling = rsmp("cv", folds = 5),
+  measure    = msr("classif.auc"),
+  search_space = search_space,
+  terminator = trm("evals", n_evals = 10),
+  tuner    = tnr("random_search")
+)
+tuned_ranger
+```
+
+## Tune
+
+```{r, warning=FALSE, message=FALSE, results='hide'}
+tuned_ranger$train(covid_task)
+```
+```{r, warning=FALSE, message=FALSE}
+tuned_ranger$tuning_result
+tuned_ranger$predict_newdata(newdata = covid_spring)$prob[1:4,]
+```
+
+## Test your model
+
+```{r, message=FALSE, warning=FALSE}
+model_tuned <-  explain(tuned_ranger,
+                           predict_function = function(m,x)
+                               m$predict_newdata(newdata = x)$prob[,1],
+                           data = covid_summer,
+                           y = covid_summer$Death == "Yes",
+                           type = "classification",
+                           label = "AutoTune",
+                           verbose = FALSE)
+
+mp_tuned <- model_performance(model_tuned)
+mp_tuned
+plot(mp_tuned, geom = "roc")
+
+plot(mp_ranger, mp_tree, mp_cdc, mp_tuned, geom = "roc")
+```
+
+## Sum up
+
+```{r, message=FALSE, warning=FALSE}
+do.call(rbind, 
+        list(cdc   = mp_cdc$measures,
+            tree   = mp_tree$measures,
+            ranger = mp_ranger$measures,
+            tuned  = mp_tuned$measures))
+```
+## Your turn
+
+- Check the AUC for AutoTune model on the `covid_spring` data. 
+- Plot ROC for both `covid_spring` and `covid_summer` data.
+
+# Global level explanation
+
+## Model parts
+
+```{r, message=FALSE, warning=FALSE, fig.width=6, fig.height=3}
+mpart_ranger <- model_parts(model_ranger)
+plot(mpart_ranger, show_boxplots = FALSE, bar_width=2)
+```
+```{r, message=FALSE, warning=FALSE, fig.width=6, fig.height=7}
+mpart_cdc <- model_parts(model_cdc)
+mpart_tree <- model_parts(model_tree)
+mpart_tuned <- model_parts(model_tuned)
+
+plot(mpart_cdc, mpart_tree, mpart_ranger, mpart_tuned, show_boxplots = FALSE, bar_width=2)
+```
+
+## Your turn
+
+- Compare with results on the `covid_spring` data.
+
+## Model profile
+
+```{r, message=FALSE, warning=FALSE}
+mprof_cdc <- model_profile(model_cdc, "Age")
+plot(mprof_cdc)
+```
+
+```{r, message=FALSE, warning=FALSE}
+mprof_cdc <- model_profile(model_cdc, variable_splits = list(Age=0:100))
+mprof_tree <- model_profile(model_tree, variable_splits = list(Age=0:100))
+mprof_ranger <- model_profile(model_ranger, variable_splits = list(Age=0:100))
+mprof_tuned <- model_profile(model_tuned, variable_splits = list(Age=0:100))
+
+plot(mprof_tuned, mprof_cdc, mprof_tree, mprof_ranger)
+```
+
+## Your turn
+
+- Compare with results on the `covid_spring` data.
+
+# Local level explanation
+
+```{r}
+john <- data.frame(Gender = factor("Male", levels = c("Male", "Female")),
+                   Age = 76,
+                   Cardiovascular.Diseases = factor("Yes", levels = c("Yes", "No")), 
+                   Diabetes = factor("No", levels = c("Yes", "No")), 
+                   Neurological.Diseases = factor("No", levels = c("Yes", "No")), 
+                   Kidney.Diseases = factor("No", levels = c("Yes", "No")), 
+                   Cancer = factor("No", levels = c("Yes", "No")))
+john
+```
+                   
+## Predict parts
+
+```{r, message=FALSE, warning=FALSE, fig.width=6, fig.height=2.5}
+ppart_cdc <- predict_parts(model_cdc, john, type = "shap")
+plot(ppart_cdc)
+
+ppart_tree <- predict_parts(model_tree, john, type = "shap")
+plot(ppart_tree)
+
+ppart_ranger <- predict_parts(model_ranger, john, type = "shap")
+plot(ppart_ranger)
+
+ppart_tuned <- predict_parts(model_tuned, john, type = "shap")
+plot(ppart_tuned)
+```
+
+## Predict profile
+
+```{r, message=FALSE, warning=FALSE}
+mprof_cdc <- predict_profile(model_cdc, john, "Age")
+plot(mprof_cdc)
+```
+```{r, message=FALSE, warning=FALSE}
+mprof_cdc <- predict_profile(model_cdc, variable_splits = list(Age=0:100), john)
+mprof_tree <- predict_profile(model_tree, variable_splits = list(Age=0:100), john)
+mprof_ranger <- predict_profile(model_ranger, variable_splits = list(Age=0:100), john)
+mprof_tuned <- predict_profile(model_tuned, variable_splits = list(Age=0:100), john)
+
+plot(mprof_tuned, mprof_cdc, mprof_tree, mprof_ranger)
+```
+
+# Extras
+
+Play with your model!
+
+```{r, eval=FALSE}
+library("modelStudio")
+
+ms <- modelStudio(model_ranger)
+ms
+```
+
+# Session info
+
+```{r, warning=FALSE, message=FALSE}
+devtools::session_info()
+```
+
