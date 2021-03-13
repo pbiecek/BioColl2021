@@ -101,6 +101,8 @@ Different models have different APIs.
 
 But you need One API to Rule Them All!
 
+[More info](http://ema.drwhy.ai/do-it-yourself.html#infoDALEX)
+
 ```{r, warning=FALSE, message=FALSE}
 library("DALEX")
 model_cdc <-  DALEX::explain(cdc_risk,
@@ -115,16 +117,24 @@ model_cdc <-  DALEX::explain(cdc_risk,
 
 For AUC the `cutoff` does not matter. But we set it to get nice precision and F1.
 
+[More info](http://ema.drwhy.ai/modelPerformance.html#modelPerformanceMethodBin)
+
 ```{r, warning=FALSE, message=FALSE}
 mp_cdc <- model_performance(model_cdc, cutoff = 0.1)
 mp_cdc
 ```
+
 ## ROC
+
+[More info](http://ema.drwhy.ai/modelPerformance.html#fig:exampleROC)
+
 ```{r, warning=FALSE, message=FALSE}
 plot(mp_cdc, geom = "roc")
 ```
 
 ## LIFT
+
+[More info](http://ema.drwhy.ai/modelPerformance.html#fig:examplePRC)
 
 ```{r, warning=FALSE, message=FALSE}
 plot(mp_cdc, geom = "lift")
@@ -138,6 +148,8 @@ plot(mp_cdc, geom = "lift")
 # Grow a tree
 
 Use all the data.
+
+[More info](https://cran.r-project.org/web/packages/partykit/vignettes/ctree.pdf)
 
 ```{r, warning=FALSE, message=FALSE, fig.width=9, fig.height=5}
 library("partykit")
@@ -176,6 +188,8 @@ plot(mp_tree, mp_cdc, geom = "roc")
 
 Let's use `mlr3` package for this.
 
+[More info](https://mlr3book.mlr-org.com/tasks.html)
+
 ```{r bagging_tree, warning=FALSE, message=FALSE}
 library("mlr3")
 
@@ -185,6 +199,8 @@ covid_task <- TaskClassif$new(id = "covid_spring",
                              positive = "Yes")
 covid_task
 ```
+
+[More info](https://mlr3book.mlr-org.com/learners.html)
 
 ```{r, warning=FALSE, message=FALSE}
 library("mlr3learners")
@@ -225,6 +241,8 @@ plot(mp_ranger, mp_tree, mp_cdc, geom = "roc")
 
 ## Define the search space
 
+[More info](https://mlr3book.mlr-org.com/searchspace.html)
+
 ```{r, warning=FALSE, message=FALSE}
 library("mlr3tuning")
 library("paradox")
@@ -243,6 +261,8 @@ search_space
 Popular searching strategies are `random_search` and `grid_search`.
 Termination is set fo a specific number of evaluations.
 Internal testing is based on 5-fold CV.
+
+[More info](https://mlr3book.mlr-org.com/tuning.html#autotuner)
 
 ```{r, warning=FALSE, message=FALSE}
 tuned_ranger = AutoTuner$new(
@@ -301,7 +321,11 @@ do.call(rbind,
 
 # Global level explanation
 
+[More info](http://ema.drwhy.ai/modelLevelExploration.html)
+
 ## Model parts
+
+[More info](http://ema.drwhy.ai/featureImportance.html)
 
 ```{r, message=FALSE, warning=FALSE, fig.width=6, fig.height=3}
 mpart_ranger <- model_parts(model_ranger)
@@ -320,6 +344,8 @@ plot(mpart_cdc, mpart_tree, mpart_ranger, mpart_tuned, show_boxplots = FALSE, ba
 - Compare with results on the `covid_spring` data.
 
 ## Model profile
+
+[More info](http://ema.drwhy.ai/partialDependenceProfiles.html)
 
 ```{r, message=FALSE, warning=FALSE}
 mprof_cdc <- model_profile(model_cdc, "Age")
@@ -341,6 +367,8 @@ plot(mprof_tuned, mprof_cdc, mprof_tree, mprof_ranger)
 
 # Local level explanation
 
+[More info](http://ema.drwhy.ai/InstanceLevelExploration.html)
+
 ```{r}
 john <- data.frame(Gender = factor("Male", levels = c("Male", "Female")),
                    Age = 76,
@@ -353,6 +381,8 @@ john
 ```
                    
 ## Predict parts
+
+[More info](http://ema.drwhy.ai/shapley.html)
 
 ```{r, message=FALSE, warning=FALSE, fig.width=6, fig.height=2.5}
 ppart_cdc <- predict_parts(model_cdc, john, type = "shap")
@@ -370,6 +400,8 @@ plot(ppart_tuned)
 
 ## Predict profile
 
+[More info](http://ema.drwhy.ai/ceterisParibus.html)
+
 ```{r, message=FALSE, warning=FALSE}
 mprof_cdc <- predict_profile(model_cdc, john, "Age")
 plot(mprof_cdc)
@@ -386,6 +418,8 @@ plot(mprof_tuned, mprof_cdc, mprof_tree, mprof_ranger)
 # Extras
 
 Play with your model!
+
+[More info](https://github.com/ModelOriented/modelStudio/blob/master/README.md)
 
 ```{r, eval=FALSE}
 library("modelStudio")
