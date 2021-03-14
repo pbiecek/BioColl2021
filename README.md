@@ -6,10 +6,11 @@ Notes for the tutorial *Introduction to Machine Learning with R* given at [Biome
 
 Short link to this page: [https://tinyurl.com/BioColl2021](https://tinyurl.com/BioColl2021)
 
-## Scripts
+## Materials 
 
-* [Markdown file](introduction_to_ml.Rmd)
-* [HTML file](https://htmlpreview.github.io/?https://raw.githubusercontent.com/pbiecek/BioColl2021/main/introduction_to_ml.html)
+* [Cheatsheet pdf](Lifecycle.pdf)
+* [R scripts Rmd](introduction_to_ml.Rmd)
+* [R scripts HTML](https://htmlpreview.github.io/?https://raw.githubusercontent.com/pbiecek/BioColl2021/main/introduction_to_ml.html)
 
 ## Data
 
@@ -18,3 +19,6 @@ Please, note that these are artificial datasets generated to mimic relations pre
 * [covid_spring.csv](covid_spring.csv)
 * [covid_summer.csv](covid_summer.csv)
 
+## Other workshops
+
+* eRum 2020: https://github.com/pbiecek/XAIatERUM2020

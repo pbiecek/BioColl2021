@@ -111,6 +111,7 @@ model_cdc <-  DALEX::explain(cdc_risk,
                    y     = covid_summer$Death == "Yes",
                    type  = "classification",
                    label = "CDC")
+predict(model_cdc, x)
 ```
 
 # Model performance
@@ -329,6 +330,7 @@ do.call(rbind,
 
 ```{r, message=FALSE, warning=FALSE, fig.width=6, fig.height=3}
 mpart_ranger <- model_parts(model_ranger)
+mpart_ranger
 plot(mpart_ranger, show_boxplots = FALSE, bar_width=2)
 ```
 ```{r, message=FALSE, warning=FALSE, fig.width=6, fig.height=7}
@@ -350,6 +352,12 @@ plot(mpart_cdc, mpart_tree, mpart_ranger, mpart_tuned, show_boxplots = FALSE, ba
 ```{r, message=FALSE, warning=FALSE}
 mprof_cdc <- model_profile(model_cdc, "Age")
 plot(mprof_cdc)
+
+mgroup_ranger <- model_profile(model_ranger, "Age", groups = "Cardiovascular.Diseases")
+plot(mgroup_ranger)
+
+mgroup_ranger <- model_profile(model_ranger, "Age", k = 3, center = TRUE)
+plot(mgroup_ranger)
 ```
 
 ```{r, message=FALSE, warning=FALSE}
