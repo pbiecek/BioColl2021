@@ -299,7 +299,7 @@ model_tuned <-  explain(tuned_ranger,
                            label = "AutoTune",
                            verbose = FALSE)
 
-mp_tuned <- model_performance(model_tuned)
+mp_tuned <- model_performance(model_tuned, cutoff = 0.1)
 mp_tuned
 plot(mp_tuned, geom = "roc")
 
@@ -400,7 +400,7 @@ ppart_tree <- predict_parts(model_tree, john, type = "shap")
 plot(ppart_tree)
 
 ppart_ranger <- predict_parts(model_ranger, john, type = "shap")
-plot(ppart_ranger)
+plot(ppart_ranger, show_boxplots=FALSE)
 
 ppart_tuned <- predict_parts(model_tuned, john, type = "shap")
 plot(ppart_tuned)
